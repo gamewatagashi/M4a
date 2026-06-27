@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WAV to M4A 変換器</title>
+    <script src="coi-serviceworker.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            text-align: center;
+            max-width: 400px;
+            width: 100%;
+        }
+        h2 { color: #333; margin-bottom: 20px; }
+        input[type="file"] { display: none; }
+        .file-label {
+            display: inline-block;
+            background: #007aff;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+        .file-label:hover { background: #0056b3; }
+        button {
+            margin-top: 20px;
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            width: 100%;
+            display: none;
+            font-size: 16px;
+        }
+        button:hover { background: #218838; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        #status { margin-top: 15px; color: #666; font-size: 14px; line-height: 1.4; }
+        #fileName { margin-top: 10px; font-size: 14px; color: #333; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>WAV ➔ M4A 変換</h2>
+        <label for="uploader" class="file-label">WAVファイルを選択</label>
+        <input type="file" id="uploader" accept="audio/wav">
+        <div id="fileName"></div>
+        <button id="convertBtn">M4Aに変換してダウンロード</button>
+        <div id="status"></div>
+    </div>
+
+    <script type="module">
+        import { FFmpeg } from 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/esm/index.js';
+        
+        const ffmpeg = new FFmpeg();
+        const convertBtn = document.getElementById('convertBtn');
+        const uploader = document.getElementById('uploader');
+        const status = document.getElementById('status');
+        const fileName = document.getElementById('fileName');
+
+        uploader.addEventListener('change', () => {
+            if (uploader.files.length > 0) {
+                fileName.textContent = `選択中: ${uploader.files[0].name}`;
+                convertBtn.style.display = 'block';
+            }
+        });
+
+        convertBtn.addEventListener('click', async () => {
+            convertBtn.disabled = true;
+            uploader.disabled = true;
+            status.textContent = '変換エンジンをロード中（初回は数十秒かかります）...';
+            
+            try {
+                await ffmpeg.load({
+                    coreURL: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm/ffmpeg-core.js',
+                });
+
+                const file = uploader.files[0];
+                status.textContent = 'ファイルを読み込み中...';
+
+                const fileData = await file.arrayBuffer();
+                await ffmpeg.writeFile('input.wav', new Uint8Array(fileData));
+
+                status.textContent = 'M4Aへ変換中...（数秒〜数十秒かかります）';
+                await ffmpeg.exec(['-i', 'input.wav', '-c:a', 'aac', 'output.m4a']);
+
+                status.textContent = '変換完了！ダウンロードを開始します。';
+                const data = await ffmpeg.readFile('output.m4a');
+                
+                const blob = new Blob([data.buffer], { type: 'audio/mp4' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = file.name.replace('.wav', '.m4a');
+                a.click();
+            } catch (error) {
+                console.error(error);
+                status.textContent = 'エラーが発生しました。もう一度お試しください。';
+            } finally {
+                convertBtn.disabled = false;
+                uploader.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
