@@ -3,133 +3,273 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WAV to M4A 変換器 (診断機能付き)</title>
+    <title>WAV to M4A 変換器</title>
     <script src="coi-serviceworker.js"></script>
     <style>
+        *, *::before, *::after { box-sizing: border-box; }
+
         body {
-            font-family: Arial, sans-serif;
+            font-family: -apple-system, "Hiragino Sans", Arial, sans-serif;
             background: #f0f2f5;
             display: flex;
             justify-content: center;
-            align-items: center;
-            height: 100vh;
+            align-items: flex-start;
+            min-height: 100vh;
             margin: 0;
+            padding: 30px 16px;
         }
+
         .container {
             background: white;
-            padding: 30px;
-            border-radius: 12px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            padding: 32px 28px;
+            border-radius: 14px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
             text-align: center;
-            max-width: 450px;
+            max-width: 560px;
             width: 100%;
         }
-        h2 { color: #333; margin-bottom: 20px; }
+
+        h2 { color: #1a1a1a; margin: 0 0 6px; font-size: 22px; }
+        .subtitle { color: #888; font-size: 13px; margin: 0 0 24px; }
+
         input[type="file"] { display: none; }
+
         .file-label {
-            display: inline-block;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
             background: #007aff;
             color: white;
-            padding: 12px 24px;
-            border-radius: 8px;
+            padding: 13px 28px;
+            border-radius: 10px;
             cursor: pointer;
-            font-weight: bold;
+            font-weight: 600;
+            font-size: 15px;
+            transition: background 0.15s;
         }
-        button {
-            margin-top: 20px;
+        .file-label:hover { background: #005ecb; }
+
+        #convertBtn {
+            margin-top: 18px;
             background: #28a745;
             color: white;
             border: none;
-            padding: 12px 24px;
-            border-radius: 8px;
-            font-weight: bold;
+            padding: 13px 28px;
+            border-radius: 10px;
+            font-weight: 600;
             cursor: pointer;
             width: 100%;
             display: none;
-            font-size: 16px;
+            font-size: 15px;
+            transition: background 0.15s;
         }
-        button:disabled { background: #ccc; cursor: not-allowed; }
-        #status { margin-top: 15px; color: #666; font-size: 14px; text-align: left; word-break: break-all; background: #f8f9fa; padding: 10px; border-radius: 6px; }
-        #fileName { margin-top: 10px; font-size: 14px; color: #333; font-weight: bold; }
-        .info-box { margin-top: 20px; font-size: 12px; color: #666; border-top: 1px dashed #ccc; padding-top: 10px; }
+        #convertBtn:hover:not(:disabled) { background: #1e8035; }
+        #convertBtn:disabled { background: #a8d5b5; cursor: not-allowed; }
+
+        #fileList {
+            margin-top: 18px;
+            text-align: left;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .file-item {
+            background: #f7f8fa;
+            border: 1px solid #e8eaed;
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-size: 13px;
+        }
+        .file-item .fname { font-weight: 600; color: #222; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .file-item .fsize { color: #aaa; font-size: 11px; margin-left: 6px; }
+        .file-item .fstatus { margin-top: 5px; font-size: 12px; color: #666; }
+
+        .progress-wrap { margin-top: 5px; height: 4px; background: #e8eaed; border-radius: 2px; overflow: hidden; display: none; }
+        .progress-bar  { height: 100%; background: #007aff; width: 0%; transition: width 0.3s; }
+
+        #globalStatus {
+            margin-top: 18px;
+            color: #555;
+            font-size: 13px;
+            text-align: left;
+            word-break: break-all;
+            background: #f7f8fa;
+            border: 1px solid #e8eaed;
+            padding: 10px 14px;
+            border-radius: 8px;
+            line-height: 1.6;
+        }
+
+        .info-box {
+            margin-top: 20px;
+            font-size: 11.5px;
+            color: #aaa;
+            border-top: 1px dashed #e0e0e0;
+            padding-top: 12px;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h2>WAV ➔ M4A 変換</h2>
-        <label for="uploader" class="file-label">WAVファイルを選択</label>
-        <input type="file" id="uploader" accept="audio/wav">
-        <div id="fileName"></div>
-        <button id="convertBtn">M4Aに変換してダウンロード</button>
-        <div id="status">ステータス: 待機中</div>
+<div class="container">
+    <h2>WAV ➔ M4A 変換</h2>
+    <p class="subtitle">ブラウザ内で完結・ファイルはアップロードされません</p>
 
-        <div class="info-box">
-            セキュリティ解除状態: <span id="securityStatus">確認中...</span>
-        </div>
+    <label for="uploader" class="file-label">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+        WAVファイルを選択（複数可）
+    </label>
+    <input type="file" id="uploader" accept="audio/wav,.wav" multiple>
+
+    <div id="fileList"></div>
+    <button id="convertBtn">▶ まとめてM4Aに変換</button>
+    <div id="globalStatus">ステータス：待機中</div>
+
+    <div class="info-box">
+        SharedArrayBuffer: <span id="securityStatus">確認中…</span>
     </div>
+</div>
 
-    <script type="module">
-        import { FFmpeg } from 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/esm/index.js';
-        
-        const ffmpeg = new FFmpeg();
-        const convertBtn = document.getElementById('convertBtn');
-        const uploader = document.getElementById('uploader');
-        const status = document.getElementById('status');
-        const fileName = document.getElementById('fileName');
-        const securityStatus = document.getElementById('securityStatus');
+<script type="module">
+// ── インポート ──────────────────────────────────────────────────────────────
+// toBlobURL : スクリプトを fetch → Blob URL 化し、クロスオリジン Worker 制限を回避
+import { FFmpeg }     from 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/esm/index.js';
+import { toBlobURL }  from 'https://unpkg.com/@ffmpeg/util@0.12.1/dist/esm/index.js';
 
-        // セキュリティ状態のチェック
-        if (window.crossOriginIsolated) {
-            securityStatus.innerHTML = "<b style='color: green;'>解禁済み (OK)</b>";
-        } else {
-            securityStatus.innerHTML = "<b style='color: orange;'>制限あり (再読み込みするか、数秒お待ちください)</b>";
+const FFMPEG_BASE = 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/esm';
+const CORE_BASE   = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
+
+const ffmpeg      = new FFmpeg();
+const convertBtn  = document.getElementById('convertBtn');
+const uploader    = document.getElementById('uploader');
+const gStatus     = document.getElementById('globalStatus');
+const fileList    = document.getElementById('fileList');
+const secStatus   = document.getElementById('securityStatus');
+
+secStatus.innerHTML = window.crossOriginIsolated
+    ? "<b style='color:#28a745'>有効 (OK)</b>"
+    : "<b style='color:#e67e22'>制限あり（ページ再読み込みで解消することがあります）</b>";
+
+let selectedFiles = [];
+
+// ── ファイル選択 ────────────────────────────────────────────────────────────
+uploader.addEventListener('change', () => {
+    selectedFiles = Array.from(uploader.files);
+    fileList.innerHTML = '';
+
+    selectedFiles.forEach((file, i) => {
+        const item = document.createElement('div');
+        item.className = 'file-item';
+        item.innerHTML = `
+            <div class="fname">${esc(file.name)}<span class="fsize">${fmtSize(file.size)}</span></div>
+            <div class="fstatus" id="fs-${i}">待機中</div>
+            <div class="progress-wrap" id="pw-${i}"><div class="progress-bar" id="pb-${i}"></div></div>
+        `;
+        fileList.appendChild(item);
+    });
+
+    convertBtn.style.display = selectedFiles.length ? 'block' : 'none';
+    gStatus.textContent = `${selectedFiles.length} ファイルが選択されています`;
+});
+
+// ── 変換ボタン ──────────────────────────────────────────────────────────────
+convertBtn.addEventListener('click', async () => {
+    convertBtn.disabled = true;
+    uploader.disabled   = true;
+
+    // FFmpeg ロード（初回のみ）
+    // ★ ポイント: worker.js / ffmpeg-core.js / .wasm を全て toBlobURL() で
+    //   Blob URL に変換してから渡す。
+    //   こうすることで GitHub Pages の "クロスオリジン Worker 禁止" を回避できる。
+    if (!ffmpeg.loaded) {
+        gStatus.innerHTML = '⏳ 変換エンジンをロード中…（初回は少し時間がかかります）';
+        try {
+            await ffmpeg.load({
+                workerURL: await toBlobURL(`${FFMPEG_BASE}/worker.js`,          'text/javascript'),
+                coreURL:   await toBlobURL(`${CORE_BASE}/ffmpeg-core.js`,       'text/javascript'),
+                wasmURL:   await toBlobURL(`${CORE_BASE}/ffmpeg-core.wasm`,     'application/wasm'),
+            });
+        } catch (err) {
+            gStatus.innerHTML = `<span style="color:red">❌ エンジンのロードに失敗: ${esc(err.message)}</span>`;
+            convertBtn.disabled = false;
+            uploader.disabled   = false;
+            return;
         }
+    }
 
-        uploader.addEventListener('change', () => {
-            if (uploader.files.length > 0) {
-                fileName.textContent = `選択中: ${uploader.files[0].name} (${(uploader.files[0].size / 1024 / 1024).toFixed(2)} MB)`;
-                convertBtn.style.display = 'block';
-            }
-        });
+    let ok = 0, ng = 0;
 
-        convertBtn.addEventListener('click', async () => {
-            convertBtn.disabled = true;
-            uploader.disabled = true;
-            status.innerHTML = '<b>1/4:</b> 変換エンジンをロード中...';
-            
-            try {
-                await ffmpeg.load({
-                    coreURL: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm/ffmpeg-core.js',
-                });
+    for (let i = 0; i < selectedFiles.length; i++) {
+        const file = selectedFiles[i];
+        const fsEl = document.getElementById(`fs-${i}`);
+        const pwEl = document.getElementById(`pw-${i}`);
+        const pbEl = document.getElementById(`pb-${i}`);
 
-                const file = uploader.files[0];
-                status.innerHTML = '<b>2/4:</b> ファイルをブラウザメモリに読み込み中...';
+        gStatus.innerHTML = `⚙️ 変換中 ${i + 1} / ${selectedFiles.length}：<b>${esc(file.name)}</b>`;
+        fsEl.innerHTML    = '<span style="color:#007aff">⏳ 変換中…</span>';
+        pwEl.style.display = 'block';
+        pbEl.style.width   = '10%';
 
-                const fileData = await file.arrayBuffer();
-                await ffmpeg.writeFile('input.wav', new Uint8Array(fileData));
+        try {
+            const buf = await file.arrayBuffer();
+            await ffmpeg.writeFile('input.wav', new Uint8Array(buf));
+            pbEl.style.width = '40%';
 
-                status.innerHTML = '<b>3/4:</b> M4Aへ変換中（ここが一番重いです）...';
-                await ffmpeg.exec(['-i', 'input.wav', '-c:a', 'aac', 'output.m4a']);
+            await ffmpeg.exec(['-i', 'input.wav', '-c:a', 'aac', '-b:a', '192k', '-y', 'output.m4a']);
+            pbEl.style.width = '80%';
 
-                status.innerHTML = '<b>4/4:</b> 変換完了！ダウンロード処理中...';
-                const data = await ffmpeg.readFile('output.m4a');
-                
-                const blob = new Blob([data.buffer], { type: 'audio/mp4' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = file.name.replace('.wav', '.m4a');
-                a.click();
-                status.innerHTML = '<span style="color: green;">✔ 全ての処理が正常に完了しました！</span>';
-            } catch (error) {
-                console.error(error);
-                // エラーの具体的内容を画面に生々しく表示する
-                status.innerHTML = `<span style="color: red; font-weight: bold;">❌ エラー発生：</span><br><small style="color: #c00;">${error.name}: ${error.message}</small><br><br>※ファイルが大きすぎるか、セキュリティ制限に引っかかっている可能性があります。`;
-            } finally {
-                convertBtn.disabled = false;
-                uploader.disabled = false;
-            }
-        });
-    </script>
+            const data = await ffmpeg.readFile('output.m4a');
+            // ★ data.buffer ではなく data（Uint8Array）を直接渡す
+            const blob = new Blob([data], { type: 'audio/mp4' });
+            const url  = URL.createObjectURL(blob);
+            const a    = Object.assign(document.createElement('a'), {
+                href: url,
+                download: file.name.replace(/\.wav$/i, '.m4a'),
+            });
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 2000);
+
+            // メモリ解放
+            await ffmpeg.deleteFile('input.wav');
+            await ffmpeg.deleteFile('output.m4a');
+
+            pbEl.style.width = '100%';
+            fsEl.innerHTML   = '<span style="color:#28a745">✔ 完了</span>';
+            ok++;
+
+        } catch (err) {
+            console.error(`[${file.name}]`, err);
+            fsEl.innerHTML    = `<span style="color:red">❌ エラー：${esc(err.message)}</span>`;
+            pwEl.style.display = 'none';
+            ng++;
+        }
+    }
+
+    if (ng === 0) {
+        gStatus.innerHTML = `<span style="color:#28a745">✔ 全 ${ok} ファイルの変換が完了しました！</span>`;
+    } else if (ok === 0) {
+        gStatus.innerHTML = `<span style="color:red">❌ 全 ${ng} ファイルでエラーが発生しました。</span>`;
+    } else {
+        gStatus.innerHTML = `<span style="color:#e67e22">⚠ 完了：成功 ${ok} 件 / エラー ${ng} 件</span>`;
+    }
+
+    convertBtn.disabled = false;
+    uploader.disabled   = false;
+});
+
+// ── ユーティリティ ─────────────────────────────────────────────────────────
+function fmtSize(b) {
+    return b < 1048576 ? (b / 1024).toFixed(1) + ' KB' : (b / 1048576).toFixed(2) + ' MB';
+}
+function esc(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
 </body>
 </html>
