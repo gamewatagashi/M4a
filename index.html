@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WAV to M4A 変換器</title>
+    <title>WAV to M4A 変換器 (診断機能付き)</title>
     <script src="coi-serviceworker.js"></script>
     <style>
         body {
@@ -21,7 +21,7 @@
             border-radius: 12px;
             box-shadow: 0 4px 15px rgba(0,0,0,0.1);
             text-align: center;
-            max-width: 400px;
+            max-width: 450px;
             width: 100%;
         }
         h2 { color: #333; margin-bottom: 20px; }
@@ -34,9 +34,7 @@
             border-radius: 8px;
             cursor: pointer;
             font-weight: bold;
-            transition: background 0.2s;
         }
-        .file-label:hover { background: #0056b3; }
         button {
             margin-top: 20px;
             background: #28a745;
@@ -50,10 +48,10 @@
             display: none;
             font-size: 16px;
         }
-        button:hover { background: #218838; }
         button:disabled { background: #ccc; cursor: not-allowed; }
-        #status { margin-top: 15px; color: #666; font-size: 14px; line-height: 1.4; }
+        #status { margin-top: 15px; color: #666; font-size: 14px; text-align: left; word-break: break-all; background: #f8f9fa; padding: 10px; border-radius: 6px; }
         #fileName { margin-top: 10px; font-size: 14px; color: #333; font-weight: bold; }
+        .info-box { margin-top: 20px; font-size: 12px; color: #666; border-top: 1px dashed #ccc; padding-top: 10px; }
     </style>
 </head>
 <body>
@@ -63,7 +61,11 @@
         <input type="file" id="uploader" accept="audio/wav">
         <div id="fileName"></div>
         <button id="convertBtn">M4Aに変換してダウンロード</button>
-        <div id="status"></div>
+        <div id="status">ステータス: 待機中</div>
+
+        <div class="info-box">
+            セキュリティ解除状態: <span id="securityStatus">確認中...</span>
+        </div>
     </div>
 
     <script type="module">
@@ -74,10 +76,18 @@
         const uploader = document.getElementById('uploader');
         const status = document.getElementById('status');
         const fileName = document.getElementById('fileName');
+        const securityStatus = document.getElementById('securityStatus');
+
+        // セキュリティ状態のチェック
+        if (window.crossOriginIsolated) {
+            securityStatus.innerHTML = "<b style='color: green;'>解禁済み (OK)</b>";
+        } else {
+            securityStatus.innerHTML = "<b style='color: orange;'>制限あり (再読み込みするか、数秒お待ちください)</b>";
+        }
 
         uploader.addEventListener('change', () => {
             if (uploader.files.length > 0) {
-                fileName.textContent = `選択中: ${uploader.files[0].name}`;
+                fileName.textContent = `選択中: ${uploader.files[0].name} (${(uploader.files[0].size / 1024 / 1024).toFixed(2)} MB)`;
                 convertBtn.style.display = 'block';
             }
         });
@@ -85,7 +95,7 @@
         convertBtn.addEventListener('click', async () => {
             convertBtn.disabled = true;
             uploader.disabled = true;
-            status.textContent = '変換エンジンをロード中（初回は数十秒かかります）...';
+            status.innerHTML = '<b>1/4:</b> 変換エンジンをロード中...';
             
             try {
                 await ffmpeg.load({
@@ -93,15 +103,15 @@
                 });
 
                 const file = uploader.files[0];
-                status.textContent = 'ファイルを読み込み中...';
+                status.innerHTML = '<b>2/4:</b> ファイルをブラウザメモリに読み込み中...';
 
                 const fileData = await file.arrayBuffer();
                 await ffmpeg.writeFile('input.wav', new Uint8Array(fileData));
 
-                status.textContent = 'M4Aへ変換中...（数秒〜数十秒かかります）';
+                status.innerHTML = '<b>3/4:</b> M4Aへ変換中（ここが一番重いです）...';
                 await ffmpeg.exec(['-i', 'input.wav', '-c:a', 'aac', 'output.m4a']);
 
-                status.textContent = '変換完了！ダウンロードを開始します。';
+                status.innerHTML = '<b>4/4:</b> 変換完了！ダウンロード処理中...';
                 const data = await ffmpeg.readFile('output.m4a');
                 
                 const blob = new Blob([data.buffer], { type: 'audio/mp4' });
@@ -110,9 +120,11 @@
                 a.href = url;
                 a.download = file.name.replace('.wav', '.m4a');
                 a.click();
+                status.innerHTML = '<span style="color: green;">✔ 全ての処理が正常に完了しました！</span>';
             } catch (error) {
                 console.error(error);
-                status.textContent = 'エラーが発生しました。もう一度お試しください。';
+                // エラーの具体的内容を画面に生々しく表示する
+                status.innerHTML = `<span style="color: red; font-weight: bold;">❌ エラー発生：</span><br><small style="color: #c00;">${error.name}: ${error.message}</small><br><br>※ファイルが大きすぎるか、セキュリティ制限に引っかかっている可能性があります。`;
             } finally {
                 convertBtn.disabled = false;
                 uploader.disabled = false;
